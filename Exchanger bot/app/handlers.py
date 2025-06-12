@@ -10,6 +10,7 @@ from app.keyboards import (
     ConversionCallback,
     conversions_keyboard_markup,
     menu_keyboards,
+    currency_inline_keyboard
 )
 from app.commands import CURRENCY, CONVERT_OWN
 from app.fsm import ConvertForm
@@ -20,16 +21,13 @@ router = Router()
 @router.message(Command(CURRENCY))
 @router.message(F.text == BUTTON_LIST_CONVERSION)
 async def conversions_list(message: Message):
-    conversions = get_all_conversions(DATABASE)
-    markup = conversions_keyboard_markup(conversions)
+    markup = conversions_keyboard_markup(get_all_conversions(DATABASE))
     await message.answer("Усі конвертації:", reply_markup=markup)
 
 @router.callback_query(ConversionCallback.filter())
 async def conversion_callback(callback: CallbackQuery, callback_data: ConversionCallback):
-    conversion_id = callback_data.id
-    conversion = get_conversion(DATABASE, conversion_id)
-    text = f"{conversion['amount']} {conversion['from']} = {conversion['result']} {conversion['to']}"
-    await callback.message.answer(text)
+    conv = get_conversion(DATABASE, callback_data.id)
+    await callback.message.answer(f"{conv['amount']} {conv['from']} = {conv['result']} {conv['to']}")
     await callback.answer()
 
 @router.message(Command(CONVERT_OWN))
@@ -43,38 +41,54 @@ async def set_amount(message: Message, state: FSMContext):
     if message.text.replace(".", "", 1).isdigit():
         await state.update_data(amount=message.text)
         await state.set_state(ConvertForm.from_currency)
-        await message.answer("Введіть валюту з якої конвертуємо (наприклад USD):")
+        await message.answer("Виберіть валюту, з якої конвертуємо:", reply_markup=currency_inline_keyboard(0, prefix="from"))
     else:
         await message.answer("Введіть число!")
 
-@router.message(ConvertForm.from_currency)
-async def set_from_currency(message: Message, state: FSMContext):
-    await state.update_data(from_currency=message.text.upper())
-    await state.set_state(ConvertForm.to_currency)
-    await message.answer("Введіть валюту в яку конвертуємо (наприклад EUR):")
-
-@router.message(ConvertForm.to_currency)
-async def set_to_currency(message: Message, state: FSMContext):
-    await state.update_data(to_currency=message.text.upper())
-    data = await state.get_data()
-    url = f"{CURRENCY_API_URL}/{data['from_currency']}/{data['to_currency']}/{data['amount']}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(url) as response:
-            result = await response.json()
-
-    if "conversion_result" in result:
-        converted = round(float(result["conversion_result"]), 2)
-        conversion_data = {
-            "amount": data["amount"],
-            "from": data["from_currency"],
-            "to": data["to_currency"],
-            "result": converted,
-        }
-        add_conversion(DATABASE, conversion_data)
-        await message.answer(
-            f"{data['amount']} {data['from_currency']} = {converted} {data['to_currency']}",
-            reply_markup=menu_keyboards()
-        )
-        await state.clear()
+@router.callback_query(lambda c: c.data.startswith("from:"))
+async def currency_from_callback(call: CallbackQuery, state: FSMContext):
+    _, value, page = call.data.split(":")
+    page = int(page)
+    if value == "next":
+        await call.message.edit_reply_markup(reply_markup=currency_inline_keyboard(page+1, prefix="from"))
+    elif value == "prev":
+        await call.message.edit_reply_markup(reply_markup=currency_inline_keyboard(page-1, prefix="from"))
     else:
-        await message.answer("Не вдалося отримати результат.")
+        await call.message.delete_reply_markup()
+        await state.update_data(from_currency=value)
+        await state.set_state(ConvertForm.to_currency)
+        await call.message.answer("Виберіть валюту, в яку конвертуємо:", reply_markup=currency_inline_keyboard(0, prefix="to"))
+    await call.answer()
+
+@router.callback_query(lambda c: c.data.startswith("to:"))
+async def currency_to_callback(call: CallbackQuery, state: FSMContext):
+    _, value, page = call.data.split(":")
+    page = int(page)
+    if value == "next":
+        await call.message.edit_reply_markup(reply_markup=currency_inline_keyboard(page+1, prefix="to"))
+    elif value == "prev":
+        await call.message.edit_reply_markup(reply_markup=currency_inline_keyboard(page-1, prefix="to"))
+    else:
+        await call.message.delete_reply_markup()
+        await state.update_data(to_currency=value)
+        data = await state.get_data()
+        url = f"{CURRENCY_API_URL}/{data['from_currency']}/{data['to_currency']}/{data['amount']}"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                result = await response.json()
+        if "conversion_result" in result:
+            converted = round(float(result["conversion_result"]), 2)
+            add_conversion(DATABASE, {
+                "amount": data["amount"],
+                "from": data["from_currency"],
+                "to": data["to_currency"],
+                "result": converted,
+            })
+            await call.message.answer(
+                f"{data['amount']} {data['from_currency']} = {converted} {data['to_currency']}",
+                reply_markup=menu_keyboards()
+            )
+            await state.clear()
+        else:
+            await call.message.answer("Не вдалося отримати результат.")
+        await call.answer()
