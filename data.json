@@ -1,0 +1,44 @@
+[
+    {
+        "amount": "123",
+        "from": "USD",
+        "to": "EUR",
+        "result": "108.45"
+    },
+    {
+        "amount": "120",
+        "from": "USD",
+        "to": "EUR",
+        "result": "105.80"
+    },
+    {
+        "amount": "100",
+        "from": "USD",
+        "to": "UAH",
+        "result": 4166.62
+    },
+    {
+        "amount": "150",
+        "from": "UAH",
+        "to": "EUR",
+        "result": 3.17
+    },
+    {
+        "amount": "1000",
+        "from": "EUR",
+        "to": "UAH",
+        "result": 47325.1
+    },
+    {
+        "amount": "100",
+        "from": "USD",
+        "to": "EUR",
+        "result": 87.47
+    },
+    {
+        "amount": "420",
+        "from": "USD",
+        "to": "UAH",
+        "result": 17485.99
+    }
+]
