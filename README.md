@@ -12,7 +12,5 @@
 [ExchangeRate API](https://www.exchangerate-api.com/)
 
 # Screenshots
-![1](images/photo111.jpg)
-![2](https://github.com/Andriy-77/telegrammbotconverter/blob/main/photo_2025-06-12_20-32-28.jpg)
 
 *by Hlybin Andriy*
